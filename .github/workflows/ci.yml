@@ -1,0 +1,40 @@
+name: Siber Köy CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint, Tip Kontrolü ve Testler
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Bağımlılıkları yükle
+        run: npm ci
+
+      - name: Prisma client üret
+        run: npx prisma generate
+
+      - name: Tip kontrolü (TypeScript)
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Birim testleri
+        run: npm test
+
+      - name: Bağımlılık güvenlik taraması (yalnızca sunucuya giden paketler)
+        run: npm audit --omit=dev --audit-level=high

@@ -1,0 +1,50 @@
+# ADIM 2 (sertifika alındıktan sonra adım 1 dosyasının YERİNE). Yalnızca __DOMAIN__ için çalışır;
+# ana sitenin (omusiber.org) server bloklarıyla hiçbir ortak yönü yoktur.
+# Oyun, sunucunun içinde 127.0.0.1:__HTTP_PORT__ adresinde dinler (docker-compose.vps.yml).
+
+# WebSocket yükseltmesi (Socket.io). Ana yapılandırmada aynı adlı bir map varsa bu blok silinir (KURULUM.md).
+map $http_upgrade $siberkoy_connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __DOMAIN__;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/siberkoy-acme;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    # Ubuntu'nun Nginx'i (1.18/1.24) `http2 on;` yönergesini tanımaz; listen içindeki http2 her sürümde çalışır.
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name __DOMAIN__;
+
+    ssl_certificate     /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    client_max_body_size 1m;
+
+    location / {
+        proxy_pass http://127.0.0.1:__HTTP_PORT__;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        # Oyun yalnızca bu başlıktaki IP'ye güvenir; her istekte EZİLİR, istemci taklit edemez.
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $siberkoy_connection_upgrade;
+        proxy_read_timeout 86400;
+        proxy_buffering off;
+    }
+}

@@ -1,0 +1,16 @@
+# ADIM 1 (yalnızca sertifika almak için). Ana sitenin dosyalarına DOKUNULMAZ; bu ayrı bir dosyadır.
+# Kurulum: /etc/nginx/sites-available/siberkoy.conf olarak kopyala, sites-enabled'a bağla, `nginx -t` → `systemctl reload nginx`.
+# __DOMAIN__ yerine alt alan adı yazılır (deploy/vps/KURULUM.md).
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __DOMAIN__;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/siberkoy-acme;
+    }
+
+    location / {
+        return 404;
+    }
+}

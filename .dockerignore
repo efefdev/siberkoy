@@ -1,0 +1,20 @@
+node_modules
+.next
+.git
+.github
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+tsconfig.tsbuildinfo
+postgres_data
+certbot_data
+__tests__
+admin-app
+scripts
+nginx
+deploy
+docker-compose*.yml
+# Arşiv/belge klasörleri: imaja girmez, derlemede tip kontrolüne de girmez
+docs

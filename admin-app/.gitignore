@@ -1,0 +1,3 @@
+# Yerel ayarlar (SSH sunucusu, knock dizisi) — asla Git'e girmez
+admin.config.json
+dist/

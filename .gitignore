@@ -1,0 +1,26 @@
+# Gizli bilgiler
+.env
+.env.local
+.env.production
+
+# Bağımlılıklar ve build çıktıları
+node_modules/
+.next/
+tsconfig.tsbuildinfo
+
+# Loglar
+*.log
+npm-debug.log*
+
+# İşletim sistemi
+.DS_Store
+Thumbs.db
+
+# Yerel Docker verileri
+postgres_data/
+certbot_data/
+
+# VPS kurulum betiklerinin yerel durum dosyaları
+deploy/vps/.ana-site-onceki.txt
+nginx/emergency/acil.log
+

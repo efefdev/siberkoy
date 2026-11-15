@@ -1,0 +1,174 @@
+# Üretim ortamı. Her servis en az yetkiyle ve kendi ağında çalışır:
+#   public (internet) ── nginx ── edge (iç ağ) ── app ── data (iç ağ) ── db
+# Uygulama ve veritabanı internete ÇIKAMAZ (iç ağlar); uygulama ele geçirilse bile dışarıya veri sızdıramaz.
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+# Günlükler dönerek tutulur (servis başına en fazla ~30 MB). Sınırsız günlük, aynı sunucudaki diğer siteleri
+# de etkileyecek şekilde diski doldurabilir.
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+    restart: unless-stopped
+    <<: [*hardening, *logging]
+    # Salt okunur dosya sistemi: açık bulan biri konteynere dosya yazamaz, kodu değiştiremez.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /app/.next/cache:size=128m,uid=1001,gid=1001,mode=0755
+    # Port yayınlanmaz; herkese açık trafik ve SSH tüneli Nginx'ten gelir.
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+      # İlk admin şifresi kalıcı ortam değişkeni olarak verilmez; seed komutuna anlık geçilir (README).
+      - PORT=3000
+      - HOME=/tmp
+      - CHECKPOINT_DISABLE=1
+      - NEXT_TELEMETRY_DISABLED=1
+    mem_limit: 768m
+    cpus: 1.5
+    pids_limit: 256
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - edge
+      - data
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    <<: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Postgres başlangıçta veri klasörünün sahipliğini ayarlayıp root'tan postgres kullanıcısına geçer
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /var/run/postgresql:size=8m,mode=2777
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    # Yalnızca iç ağ: port yok, internet yok
+    expose:
+      - "5432"
+    networks:
+      - data
+
+  nginx:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    <<: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # 80/443 dinlemek ve işçileri nginx kullanıcısına düşürmek için gereken en az yetkiler
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=64m
+      - /var/run:size=4m
+      - /tmp:size=16m
+    ports:
+      - "80:80"
+      - "443:443"
+      # SSH tüneli girişi: YALNIZCA sunucunun kendi içine (127.0.0.1) açılır (nginx/conf.d/tunnel.conf)
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      # Acil durum admin izni (scripts/admin-acil.sh yazar). Nginx her başlangıçta bu listeyi boşaltır.
+      - ./nginx/emergency:/etc/nginx/emergency
+      - certbot_data:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    # Yenilenen sertifikanın devreye girmesi için Nginx 12 saatte bir yapılandırmayı yeniden yükler.
+    command: /bin/sh -c 'printf "# scripts/admin-acil.sh yonetir\n" > /etc/nginx/emergency/allow.conf; while :; do sleep 12h & wait $${!}; nginx -s reload; done & exec nginx -g "daemon off;"'
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    depends_on:
+      - app
+    networks:
+      - public
+      - edge
+
+  certbot:
+    image: certbot/certbot:v4.0.0
+    restart: unless-stopped
+    <<: *logging
+    security_opt:
+      - no-new-privileges:true
+    # Yalnızca kendi birimlerine (root'a ait) yazar ve dışarıya HTTPS ile bağlanır; ek yetki gerekmez.
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    volumes:
+      - certbot_data:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;'"
+    mem_limit: 256m
+    networks:
+      - public
+
+volumes:
+  postgres_data:
+  certbot_data:
+  certbot_www:
+
+networks:
+  # İnternete çıkışı olan tek ağ: yalnızca Nginx ve Certbot
+  public:
+    driver: bridge
+  # Nginx ↔ uygulama. internal: dış dünyaya çıkış yok
+  edge:
+    driver: bridge
+    internal: true
+  # Uygulama ↔ veritabanı. internal: dış dünyaya çıkış yok
+  data:
+    driver: bridge
+    internal: true

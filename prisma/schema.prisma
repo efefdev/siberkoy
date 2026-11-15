@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Event {
+  id           String             @id @default(uuid())
+  name         String
+  eventPin     String             @unique // 6 haneli
+  status       String             @default("WAITING") // WAITING, IN_PROGRESS, COMPLETED
+  createdAt    DateTime           @default(now())
+  closedAt     DateTime?
+  allowLess8   Boolean            @default(false) // Test modu için 8 kişi altı kuralını ezme (yine de en az 4 kişi)
+  registrationOpen Boolean        @default(true) // Admin kapatırsa yeni oyuncu katılamaz (yeniden bağlanma ve cihaz kodu çalışır)
+  theme        String             @default("default") // default, halloween (etkinlik başına görünüm)
+  isPractice   Boolean            @default(false) // Prova etkinliği: sahte oyuncularla anlatıcı denemesi
+  players      Player[]
+  rounds       Round[]
+  narratorPins NarratorPIN[]
+  scoreEvents  ScoreEvent[]
+  adminAlerts  AdminAlert[]
+  feedbacks    NarratorFeedback[]
+}
+
+model NarratorPIN {
+  id          String             @id @default(uuid())
+  eventId     String
+  pin         String             @unique
+  tableNumber Int // Sabit masa: anlatıcı tüm turlarda bu masayı yönetir
+  isActive    Boolean            @default(true) // Admin iptal edebilir (aynı masaya yeni PIN üretilince eskisi pasif olur)
+  usedAt      DateTime? // İlk girişte doldurulur; dolu PIN ile tekrar giriş yapılamaz
+  createdAt   DateTime           @default(now()) // PIN, oluşturulduktan 8 saat sonra geçersizdir
+  event       Event              @relation(fields: [eventId], references: [id])
+  rooms       Room[]
+  feedbacks   NarratorFeedback[]
+
+  @@index([eventId, tableNumber])
+}
+
+model Player {
+  id               String             @id @default(uuid())
+  eventId          String
+  username         String // Görünen ad
+  usernameKey      String // Eşsizlik anahtarı: küçük harfe çevrilmiş, normalize edilmiş ad
+  sessionTokenHash String             @unique // Oturum token'ının SHA-256 özeti; token'ın kendisi saklanmaz
+  deviceIdHash     String? // Tarayıcıya özgü kimliğin SHA-256 özeti (ban için)
+  transferCodeHash String?            @unique // Admin'in ürettiği tek kullanımlık cihaz değiştirme kodunun SHA-256 özeti
+  transferCodeExpiresAt DateTime?
+  status           String             @default("LOBBY") // LOBBY, PLAYING, KICKED, BANNED
+  createdAt        DateTime           @default(now())
+  lastActive       DateTime           @default(now())
+  event            Event              @relation(fields: [eventId], references: [id])
+  assignments      RoomAssignment[]
+  scoreEvents      ScoreEvent[]
+  feedbacks        NarratorFeedback[]
+
+  @@unique([eventId, usernameKey])
+  @@index([eventId, deviceIdHash])
+}
+
+model Round {
+  id          String    @id @default(uuid())
+  eventId     String
+  roundNumber Int
+  status      String    @default("PREPARING") // PREPARING, ACTIVE, COMPLETED (tüm masalar bitince)
+  startTime   DateTime?
+  endTime     DateTime?
+  event       Event     @relation(fields: [eventId], references: [id])
+  rooms       Room[]
+
+  @@unique([eventId, roundNumber])
+}
+
+model Room {
+  id             String           @id @default(uuid())
+  roundId        String
+  narratorPinId  String?
+  roomNumber     Int
+  status         String           @default("ACTIVE") // ACTIVE, COMPLETED
+  startTime      DateTime?
+  endTime        DateTime? // Masa sonucunun girildiği an (tie-breaker için)
+  winningSide    String? // DEFENDERS, ATTACKERS
+  bonusAwardedAt DateTime? // Masa başına tek bonus puanı
+  round          Round            @relation(fields: [roundId], references: [id])
+  narrator       NarratorPIN?     @relation(fields: [narratorPinId], references: [id])
+  assignments    RoomAssignment[]
+  adminAlerts    AdminAlert[]
+  scoreEvents    ScoreEvent[]
+
+  @@unique([roundId, roomNumber])
+  @@index([narratorPinId])
+}
+
+model RoomAssignment {
+  id       String  @id @default(uuid())
+  roomId   String
+  playerId String
+  role     String // USER, ATTACKER, ANALYST, PATCHER (eski turlarda HONEYPOT da olabilir)
+  isAlive  Boolean @default(true)
+  eliminatedAt DateTime? // Anlatıcının kısa süreli "geri al" penceresi için
+  room     Room    @relation(fields: [roomId], references: [id])
+  player   Player  @relation(fields: [playerId], references: [id])
+
+  @@unique([roomId, playerId])
+  @@index([playerId])
+}
+
+// Append-only: kayıtlar asla güncellenmez/silinmez. Düzeltme, ters işaretli ADJUSTMENT kaydıyla yapılır.
+model ScoreEvent {
+  id        String   @id @default(uuid())
+  eventId   String
+  playerId  String
+  roomId    String?
+  kind      String // WIN, SURVIVE, BONUS, ADJUSTMENT
+  score     Int
+  reason    String
+  createdBy String // "ADMIN:<id>" veya "NARRATOR:<narratorPinId>"
+  createdAt DateTime @default(now())
+  event     Event    @relation(fields: [eventId], references: [id])
+  player    Player   @relation(fields: [playerId], references: [id])
+  room      Room?    @relation(fields: [roomId], references: [id])
+
+  @@index([eventId])
+  @@index([playerId])
+  @@index([roomId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  actorId   String
+  actorType String // ADMIN, NARRATOR, PLAYER, SYSTEM
+  targetId  String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model AdminAlert {
+  id         String   @id @default(uuid())
+  eventId    String
+  roomId     String?
+  message    String
+  isResolved Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id])
+  room  Room? @relation(fields: [roomId], references: [id])
+
+  @@index([eventId, isResolved])
+}
+
+model NarratorFeedback {
+  id         String   @id @default(uuid())
+  eventId    String
+  playerId   String
+  narratorId String
+  rating     Int // 1-5 arası puan
+  message    String? // Geri bildirim mesajı
+  createdAt  DateTime @default(now())
+
+  event    Event       @relation(fields: [eventId], references: [id])
+  player   Player      @relation(fields: [playerId], references: [id])
+  narrator NarratorPIN @relation(fields: [narratorId], references: [id])
+
+  @@unique([playerId, narratorId])
+  @@index([eventId])
+}

@@ -1,0 +1,31 @@
+# Sunucuda Nginx değil Apache varsa. /etc/apache2/sites-available/siberkoy.conf olarak kopyalanır.
+# Gerekli modüller: proxy proxy_http proxy_wstunnel headers ssl rewrite. Eksik olan modülü etkinleştirmek
+# (a2enmod) ana sunucunun genel ayarıdır: önce kullanıcıya sorulur (KURULUM.md).
+# ADIM 1'de yalnızca :80 bloğu etkinleştirilir; sertifika alınınca :443 bloğunun yorumu kaldırılır.
+<VirtualHost *:80>
+    ServerName __DOMAIN__
+    Alias /.well-known/acme-challenge/ /var/www/siberkoy-acme/.well-known/acme-challenge/
+    <Directory /var/www/siberkoy-acme>
+        Require all granted
+    </Directory>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+</VirtualHost>
+
+#<VirtualHost *:443>
+#    ServerName __DOMAIN__
+#    SSLEngine on
+#    SSLCertificateFile    /etc/letsencrypt/live/__DOMAIN__/fullchain.pem
+#    SSLCertificateKeyFile /etc/letsencrypt/live/__DOMAIN__/privkey.pem
+#    ProxyPreserveHost On
+#    ProxyRequests Off
+#    RequestHeader set X-Real-IP "%{REMOTE_ADDR}s"
+#    RequestHeader set X-Forwarded-For "%{REMOTE_ADDR}s"
+#    RequestHeader set X-Forwarded-Proto "https"
+#    RewriteEngine On
+#    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+#    RewriteRule ^/(.*) ws://127.0.0.1:__HTTP_PORT__/$1 [P,L]
+#    ProxyPass        / http://127.0.0.1:__HTTP_PORT__/ timeout=86400
+#    ProxyPassReverse / http://127.0.0.1:__HTTP_PORT__/
+#</VirtualHost>

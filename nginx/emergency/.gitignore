@@ -1,0 +1,3 @@
+# Sunucuda scripts/admin-acil.sh yazar; Nginx her başlangıçta yeniden oluşturur. Repoya girmez.
+allow.conf
+*.log

@@ -1,0 +1,81 @@
+# Paylaşımlı VPS kurulumu (ana site omusiber.org aynı sunucuda çalışırken).
+# docker-compose.yml'nin ÜZERİNE uygulanır; .env'de şu iki satır olunca tüm `docker compose` komutları bunu kullanır:
+#   COMPOSE_PROJECT_NAME=siberkoy
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.vps.yml
+#
+# Farklar:
+#   • Oyun 80/443'ü KULLANMAZ. Nginx yalnızca 127.0.0.1:${SIBERKOY_HTTP_PORT} ve 127.0.0.1:${SIBERKOY_TUNNEL_PORT}
+#     adreslerinde dinler; ikisi de internetten erişilemez.
+#   • TLS'i ve alan adını sunucunun mevcut web sunucusu yönetir (deploy/vps/ şablonları); Certbot konteyneri çalışmaz.
+#   • Ağlar, birimler ve konteyner adları "siberkoy" projesine aittir; ana sitenin hiçbir ağına, birimine katılmaz.
+# Gereken: Docker Compose 2.24.4 veya üstü (!override etiketi).
+
+services:
+  # 2 GB RAM'li, ana siteyle paylaşılan sunucu için sınırlar. Ölçüm (yük testi, 150 oyuncu + 150 soket):
+  # uygulama en çok ~185 MB, veritabanı ~80 MB kullandı. Sınırlar bunun ~2 katı; aşılırsa yalnızca oyun
+  # konteyneri yeniden başlar, ana site etkilenmez.
+  app:
+    mem_limit: 448m
+    cpus: 1.0
+    environment:
+      # Node yığını sınırın altında tutulur ki çöp toplayıcı konteyner sınırına çarpmadan devreye girsin.
+      - NODE_OPTIONS=--max-old-space-size=320
+
+  db:
+    mem_limit: 256m
+    cpus: 0.75
+
+  nginx:
+    # Ayrıcalıklı port dinlenmediği için NET_BIND_SERVICE gerekmez.
+    cap_add: !override
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    ports: !override
+      - "127.0.0.1:${SIBERKOY_HTTP_PORT:-8088}:8080"
+      - "127.0.0.1:${SIBERKOY_TUNNEL_PORT:-3000}:3000"
+    volumes: !override
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d-vps:/etc/nginx/conf.d:ro
+      # Gerçek istemci IP'sine nereden güvenileceği: host-proxy (varsayılan) ya da cloudflare-tunnel
+      - ./nginx/realip/${SIBERKOY_REALIP:-host-proxy}.conf:/etc/nginx/realip.conf:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - ./nginx/emergency:/etc/nginx/emergency
+    # Sertifika yenileme yok (ana sunucu yapar); yine de tek satırlık acil izin listesi her başlangıçta sıfırlanır.
+    command: /bin/sh -c 'printf "# scripts/admin-acil.sh yonetir\n" > /etc/nginx/emergency/allow.conf; exec nginx -g "daemon off;"'
+    # Ana siteyi etkilememek için sert sınırlar
+    mem_limit: 128m
+
+  # Cloudflare Tunnel: ana web sunucusuna dokunmadan yayın (KURULUM.md · 6b). Yalnızca .env'de
+  # COMPOSE_PROFILES=cloudflare varsa başlar. Dışarıya kendisi bağlanır; hiçbir port açmaz.
+  # Cloudflare panelindeki yayın adresi YALNIZCA http://nginx:8080 olmalıdır (3000 admin tünelidir).
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3
+    profiles: ["cloudflare"]
+    restart: unless-stopped
+    # YAML çapaları dosyalar arası geçmez: docker-compose.yml'deki günlük sınırı burada açıkça yazılır.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 64
+    depends_on:
+      - nginx
+    networks:
+      - public
+
+  certbot:
+    # Bu kurulumda kullanılmaz: profil seçilmedikçe başlatılmaz.
+    profiles: ["kullanilmiyor"]

@@ -1,0 +1,82 @@
+/* Admin kılavuzunu A4 yazdırma / PDF */
+@page {
+  size: A4;
+  margin: 0;
+}
+@media print {
+  html,
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .no-print,
+  [role='status'] {
+    display: none !important;
+  }
+  .admin-guide {
+    max-width: none;
+    padding: 14mm 16mm 0 !important;
+  }
+  .guide-break {
+    break-before: page;
+    padding-top: 14mm;
+  }
+  .guide-section,
+  li,
+  tr {
+    break-inside: avoid;
+  }
+}
+
+/* Sonuç raporu (A4 özet) */
+@media print {
+  .results {
+    max-width: none;
+    padding: 12mm 14mm 0 !important;
+  }
+  .report-sheet {
+    padding: 0 !important;
+  }
+  .report-sheet tr {
+    break-inside: avoid;
+  }
+}
+
+/* Yedek kart seti: mürekkep harcamasın diye açık zeminle basılır */
+@media print {
+  body:has(.backup),
+  html:has(.backup) {
+    background: #fff !important;
+  }
+  .backup {
+    max-width: none;
+    padding: 0 !important;
+  }
+  .backup .sheet {
+    padding: 12mm 12mm !important;
+    border: 0 !important;
+    background: #fff !important;
+  }
+  .backup .page-break {
+    break-before: page;
+    margin-top: 0 !important;
+  }
+  .backup,
+  .backup * {
+    color: #16131f !important;
+    background-color: transparent !important;
+  }
+  .backup .role-card {
+    height: 64mm;
+    border: 1.5px dashed #555 !important;
+    border-radius: 3mm;
+    break-inside: avoid;
+  }
+  .backup .card-grid {
+    gap: 0 !important;
+  }
+  .backup table th,
+  .backup table td {
+    border-color: #bbb !important;
+  }
+}

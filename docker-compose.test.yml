@@ -1,0 +1,55 @@
+# Yerel geliştirme/test ortamı. ÜRETİMDE KULLANMAYIN (sabit test şifreleri içerir).
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    ports:
+      # Yalnızca bu bilgisayardan erişilir (aynı Wi-Fi'deki biri X-Real-IP uydurup kilitleri atlatamasın)
+      - "127.0.0.1:3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://siberkoy_user:test_password@db:5432/siberkoy
+      - JWT_SECRET=test-secret-key-do-not-use-in-production-minimum-64-chars-padding
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+      - ADMIN_EMAIL=admin@localhost.test
+      - ADMIN_INITIAL_PASSWORD=yerel-test-sifresi-123
+      - PORT=3000
+    volumes:
+      # Kaynak kodunu canlı yansıt (hot reload)
+      - ./src:/app/src
+      - ./prisma:/app/prisma
+      - ./public:/app/public
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - siberkoy_test
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: siberkoy
+      POSTGRES_USER: siberkoy_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      # Yalnızca bu bilgisayardan erişilebilir (aynı Wi-Fi'deki başkaları bağlanamaz)
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U siberkoy_user -d siberkoy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - siberkoy_test
+
+volumes:
+  test_postgres_data:
+
+networks:
+  siberkoy_test:
+    driver: bridge
