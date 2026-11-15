@@ -2,6 +2,7 @@
   "name": "omusiberkoyu",
   "version": "1.0.0",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "node server.js",
     "build": "next build",

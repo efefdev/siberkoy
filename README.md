@@ -16,6 +16,7 @@
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-Prisma-4169e1?logo=postgresql&logoColor=fff">
   <img alt="Docker" src="https://img.shields.io/badge/Docker-Compose-2496ed?logo=docker&logoColor=fff">
   <img alt="Tests" src="https://img.shields.io/badge/tests-137%20passing-2ea44f">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
 </p>
 
 <p align="center"><a href="#english">English</a> · <a href="#türkçe">Türkçe</a></p>
@@ -165,6 +166,10 @@ CI runs type check, lint, tests and `npm audit` for production dependencies on e
 - [`docs/tanitim/`](docs/tanitim/): invitation, Instagram stories and the presentation for the community board
 
 Found a security issue? Please email `admin@omusiber.org` instead of opening a public issue.
+
+### License
+
+[MIT](LICENSE). Use it, fork it, run it at your own club's event.
 
 ---
 
@@ -412,3 +417,7 @@ npx tsc --noEmit    # Tip kontrolü
 ### Güvenlik bildirimi
 
 Bir güvenlik açığı bulursanız lütfen herkese açık issue açmak yerine `admin@omusiber.org` adresine yazın.
+
+### Lisans
+
+[MIT](LICENSE). Kullanabilir, çatallayabilir, kendi topluluğunuzun etkinliğinde çalıştırabilirsiniz.
